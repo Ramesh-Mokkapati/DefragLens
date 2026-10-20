@@ -1,0 +1,51 @@
+# Visual Studio working state
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Build output (this project uses bin\ and obj\; x64\ and Debug\/Release\ are VS defaults)
+bin/
+obj/
+x64/
+x86/
+ARM64/
+[Dd]ebug/
+[Rr]elease/
+
+# Compiler / linker intermediates
+*.obj
+*.pch
+*.pdb
+*.ipdb
+*.iobj
+*.idb
+*.ilk
+*.exp
+*.lib
+*.res
+*.tlog
+*.lastbuildstate
+*.log
+*.recipe
+
+# IntelliSense and code browsing databases
+*.VC.db
+*.VC.VC.opendb
+*.sdf
+*.opensdf
+*.ipch
+ipch/
+
+# Generated binaries
+*.exe
+*.dll
+
+# Resource editor backups
+*.aps
+
+# OS files
+Thumbs.db
+Desktop.ini
+.DS_Store

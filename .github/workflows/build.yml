@@ -1,0 +1,83 @@
+# GitHub Actions workflow for DefragLens.
+# Builds Release for Win32 and x64 with every warning treated as an error, then uploads one
+# artifact: DefragLens-<version>.zip containing Win32\ and x64\ (DefragLens.exe and
+# DefragLensBoot.exe each) plus README.md.
+
+name: Build
+
+# Runs for pushes to main, version tags (v1.0.0 ...), pull requests and manual starts.
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+# Read-only token: the workflow only checks out code and uploads an artifact.
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build Win32 and x64
+    # Visual Studio 2022 with the v143 toolset and the C++ MFC component (x86 and x64).
+    runs-on: windows-2022
+
+    steps:
+      - name: Check out
+        uses: actions/checkout@v7
+
+      # Find the newest Visual Studio install that has MSBuild and the MFC component.
+      - name: Locate MSBuild
+        id: msbuild
+        shell: pwsh
+        run: |
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $path = & $vswhere -latest -products * `
+            -requires Microsoft.Component.MSBuild Microsoft.VisualStudio.Component.VC.ATLMFC `
+            -find 'MSBuild\**\Bin\MSBuild.exe' | Select-Object -First 1
+          if (-not $path) { throw 'MSBuild with the C++ MFC component was not found on this runner.' }
+          Write-Host "Using $path"
+          "path=$path" >> $env:GITHUB_OUTPUT
+
+      # Rebuild each platform; TreatWarningAsError covers compiler/linker, -warnaserror covers MSBuild.
+      - name: Build Release (warnings are errors)
+        shell: pwsh
+        run: |
+          foreach ($platform in 'Win32', 'x64') {
+            Write-Host "::group::Release|$platform"
+            & '${{ steps.msbuild.outputs.path }}' DefragLens.sln /t:Rebuild /p:Configuration=Release /p:Platform=$platform `
+              /p:TreatWarningAsError=true -warnaserror /m /nologo /v:minimal
+            $code = $LASTEXITCODE
+            Write-Host '::endgroup::'
+            if ($code -ne 0) { throw "Release|$platform failed with exit code $code." }
+          }
+
+      # Stage both platforms' programs and the README, then zip them. The version is the tag name for
+      # tag builds and the short commit hash otherwise.
+      - name: Package
+        id: package
+        shell: pwsh
+        run: |
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA.Substring(0, 7) }
+          $name = "DefragLens-$version"
+          $stage = Join-Path $env:RUNNER_TEMP $name
+          foreach ($platform in 'Win32', 'x64') {
+            $target = New-Item -ItemType Directory -Force -Path (Join-Path $stage $platform)
+            foreach ($exe in 'DefragLens.exe', 'DefragLensBoot.exe') {
+              Copy-Item -Path "bin\$platform\Release\$exe" -Destination $target -ErrorAction Stop
+            }
+          }
+          Copy-Item -Path README.md -Destination $stage
+          $zip = Join-Path $env:RUNNER_TEMP "$name.zip"
+          Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
+          Get-ChildItem -Recurse $stage | ForEach-Object { Write-Host $_.FullName.Substring($stage.Length + 1) }
+          "zip=$zip" >> $env:GITHUB_OUTPUT
+
+      # archive: false uploads the zip as-is, so the artifact is the zip itself (not a zip inside a zip).
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          path: ${{ steps.package.outputs.zip }}
+          archive: false
+          if-no-files-found: error

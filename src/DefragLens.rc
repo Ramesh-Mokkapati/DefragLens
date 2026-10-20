@@ -1,0 +1,119 @@
+// DefragLens.rc
+// Resources for DefragLens.exe: application icon, the three dialog templates and version info.
+// Dialog coordinates are in dialog units; the main window and the cluster map are re-laid out
+// in pixels at run time, the two smaller dialogs use these positions as they are.
+
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+#include "winres.h"
+#undef APSTUDIO_READONLY_SYMBOLS
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+// Application icon (window title bar, taskbar, Explorer).
+IDR_MAINFRAME           ICON                    "res\DefragLens.ico"
+
+// Positions here are only initial; CDefragLensDlg::Layout places everything at runtime.
+IDD_DEFRAGLENS_DIALOG DIALOGEX 0, 0, 560, 400
+STYLE DS_SETFONT | DS_FIXEDSYS | WS_POPUP | WS_VISIBLE | WS_CAPTION | WS_SYSMENU | WS_THICKFRAME | WS_MINIMIZEBOX | WS_MAXIMIZEBOX | WS_CLIPCHILDREN
+EXSTYLE WS_EX_APPWINDOW
+CAPTION "DefragLens"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "&Volume:",IDC_STATIC_VOLUME,7,9,30,8
+    COMBOBOX        IDC_COMBO_VOLUME,40,7,160,120,CBS_DROPDOWNLIST | WS_VSCROLL | WS_TABSTOP
+    PUSHBUTTON      "&Analyze",IDC_BTN_ANALYZE,206,6,55,14
+    PUSHBUTTON      "&Defragment",IDC_BTN_DEFRAG,265,6,60,14
+    PUSHBUTTON      "S&top",IDC_BTN_STOP,329,6,45,14
+    PUSHBUTTON      "&Boot Optimize",IDC_BTN_BOOT,378,6,60,14
+    PUSHBUTTON      "System &Files...",IDC_BTN_SYSFILES,442,6,60,14
+    LTEXT           "",IDC_STATIC_MEDIA,380,9,173,8
+    LTEXT           "&Highly fragmented:",IDC_STATIC_HIGH,7,28,62,8
+    EDITTEXT        IDC_EDIT_HIGH,72,26,36,12,ES_NUMBER | ES_RIGHT | WS_TABSTOP
+    CONTROL         "",IDC_SPIN_HIGH,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,108,26,10,12
+    LTEXT           "or more fragments",IDC_STATIC_HIGH2,114,28,60,8
+    PUSHBUTTON      "Defragment Highl&y Fragmented",IDC_BTN_DEFRAG_HIGH,178,25,120,14
+    CONTROL         "Show &only highly fragmented files in the list",IDC_CHECK_HIGH_ONLY,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,304,28,170,10
+    PUSHBUTTON      "Boot-T&ime Defrag...",IDC_BTN_BOOTTIME,478,25,75,14
+    LTEXT           "",IDC_CLUSTER_MAP,7,26,546,160
+    CONTROL         "",IDC_PROGRESS,"msctls_progress32",WS_BORDER,7,190,546,10
+    LTEXT           "",IDC_STATIC_STATUS,7,204,546,8,SS_ENDELLIPSIS | SS_NOPREFIX
+    CONTROL         "",IDC_LIST_STATS,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,7,216,180,160
+    CONTROL         "",IDC_LIST_FILES,"SysListView32",LVS_REPORT | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,193,216,360,160
+    PUSHBUTTON      "Close",IDCANCEL,503,380,50,14
+END
+
+// System Files dialog (CSystemFilesDlg): read-only report plus confirmed fixes.
+IDD_SYSTEM_FILES DIALOGEX 0, 0, 470, 262
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "System Files"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Files Windows keeps locked. Their locations are read from the NTFS file records, so nothing is opened or changed until you choose a fix and confirm it.",IDC_STATIC,7,7,456,18
+    CONTROL         "",IDC_SYS_LIST,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_SHOWSELALWAYS | LVS_NOSORTHEADER | WS_BORDER | WS_TABSTOP,7,28,456,80
+    LTEXT           "Page file setting:",IDC_STATIC,7,114,62,8
+    LTEXT           "",IDC_SYS_PAGING,72,114,391,8,SS_ENDELLIPSIS | SS_NOPREFIX
+    GROUPBOX        "Fixes (each asks for confirmation first)",IDC_STATIC,7,128,456,62
+    PUSHBUTTON      "Set Fixed &Page File Size...",IDC_SYS_FIX_PAGEFILE,14,142,108,14
+    PUSHBUTTON      "Re&store Page File Setting",IDC_SYS_RESTORE_PAGEFILE,126,142,108,14
+    PUSHBUTTON      "Recreate &Hibernation File...",IDC_SYS_FIX_HIBER,238,142,108,14
+    PUSHBUTTON      "Consolidate &MFT...",IDC_SYS_FIX_MFT,350,142,106,14
+    LTEXT           "",IDC_SYS_RESULT,14,162,442,24,SS_NOPREFIX
+    LTEXT           "To rebuild a fragmented page file: set ""No paging file"" in Virtual Memory settings, restart, run Defragment, then turn the page file back on and restart. Windows usually allocates it in one piece if enough contiguous space is free.",IDC_STATIC,7,196,456,34
+    PUSHBUTTON      "&Refresh",IDC_SYS_REFRESH,359,241,50,14
+    DEFPUSHBUTTON   "Close",IDCANCEL,413,241,50,14
+END
+
+// Boot-Time Defrag dialog (CBootTimeDlg): options for the one-time pass at the next restart.
+IDD_BOOT_TIME DIALOGEX 0, 0, 400, 252
+STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Boot-Time Defrag"
+FONT 9, "Segoe UI", 400, 0, 0x1
+BEGIN
+    LTEXT           "Runs once at the next restart, before Windows starts its services or opens the page file, so files that are in use now can be moved. It removes itself as it starts, so it never runs twice.",IDC_STATIC,7,7,386,18
+    GROUPBOX        "What to process",IDC_STATIC,7,30,386,62
+    CONTROL         "Files that could not be moved while Windows was running",IDC_BT_FAILED,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,43,372,10
+    CONTROL         "&Page file, swap file and hibernation file",IDC_BT_SYSFILES,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,57,372,10
+    CONTROL         "&MFT (everything except its first piece, which NTFS pins in place)",IDC_BT_MFT,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,71,372,10
+    GROUPBOX        "Safety",IDC_STATIC,7,96,386,62
+    CONTROL         "&Dry run: check everything and write a log, but move nothing (recommended the first time)",IDC_BT_DRYRUN,"Button",BS_AUTOCHECKBOX | WS_TABSTOP,14,109,372,10
+    LTEXT           "Stop after",IDC_STATIC,14,126,36,8
+    EDITTEXT        IDC_BT_MINUTES,52,124,36,12,ES_NUMBER | ES_RIGHT | WS_TABSTOP
+    CONTROL         "",IDC_BT_MINUTES_SPIN,"msctls_updown32",UDS_SETBUDDYINT | UDS_ALIGNRIGHT | UDS_AUTOBUDDY | UDS_ARROWKEYS | UDS_NOTHOUSANDS,88,124,10,12
+    LTEXT           "minutes.",IDC_STATIC,94,126,40,8
+    LTEXT           "Moves use the same crash-safe file-system operation as normal defragmentation. Nothing runs if Windows' disk check finds the volume needs repair.",IDC_STATIC,14,140,372,16
+    LTEXT           "",IDC_BT_STATE,7,164,386,26,SS_NOPREFIX
+    LTEXT           "",IDC_BT_LASTRUN,7,194,386,26,SS_NOPREFIX
+    PUSHBUTTON      "&Schedule for Next Restart",IDC_BT_SCHEDULE,7,231,104,14
+    PUSHBUTTON      "&Cancel Scheduled Run",IDC_BT_CANCELRUN,115,231,90,14
+    PUSHBUTTON      "View &Last Log",IDC_BT_VIEWLOG,209,231,70,14
+    DEFPUSHBUTTON   "Close",IDCANCEL,343,231,50,14
+END
+
+// Version information shown in the file's Properties > Details tab.
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,0,1
+ PRODUCTVERSION 1,0,0,1
+ FILEFLAGSMASK 0x3fL
+ FILEOS 0x40004L
+ FILETYPE 0x1L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "FileDescription", "DefragLens disk defragmenter"
+            VALUE "FileVersion", "1.0.0.1"
+            VALUE "InternalName", "DefragLens.exe"
+            VALUE "OriginalFilename", "DefragLens.exe"
+            VALUE "ProductName", "DefragLens"
+            VALUE "ProductVersion", "1.0.0.1"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x409, 1200
+    END
+END
