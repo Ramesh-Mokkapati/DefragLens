@@ -41,6 +41,8 @@ protected:
     // File list
     afx_msg void OnFileDblClk(NMHDR* pNMHDR, LRESULT* pResult);
     afx_msg void OnFileCustomDraw(NMHDR* pNMHDR, LRESULT* pResult);
+    // Right-click (or Shift+F10 / Menu key) on the file list: Defragment, Open File Location, Copy Path.
+    afx_msg void OnContextMenu(CWnd* pWnd, CPoint point);
 
     // Messages from the engine / worker thread (see DefragEngine.h)
     afx_msg LRESULT OnDefragProgress(WPARAM wParam, LPARAM lParam);
@@ -62,6 +64,9 @@ private:
     void RefreshFileList();
     void UpdateHighButton();         // label (with count) and enabled state of the highly fragmented button
     void ShowBootTimeStatus();       // reports a scheduled or just-finished boot-time pass
+    std::vector<CString> GetSelectedPaths() const;   // paths of the selected rows in the file list
+    void ShowInExplorer(const CString& path);        // opens the folder with the file selected
+    void CopyToClipboard(const CString& text);
     int Scale(int px) const { return MulDiv(px, m_dpi, 96); }   // 96-DPI pixels to window DPI
 
     HICON m_hIcon;
@@ -76,6 +81,7 @@ private:
     CWinThread* m_worker = nullptr; // running operation; null when idle
     CDefragEngine::Operation m_op = CDefragEngine::OpAnalyze;
     DWORD m_defragMin = 2;          // minimum fragments for the running defrag pass
+    std::vector<CString> m_selectedPaths;   // files chosen from the context menu (OpDefragmentSelected)
     bool m_busy = false;
     int m_dpi = 96;
 };

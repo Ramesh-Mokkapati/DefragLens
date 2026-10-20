@@ -703,17 +703,6 @@ bool CDefragEngine::Defragment(DWORD minFragments)
         return false;
     }
 
-    const bool highOnly = minFragments > 2;
-
-    SetStatus(_T("Preparing to defragment..."));
-    Notify(0, true);
-    if (!ReadVolumeBitmap())
-    {
-        SetStatus(_T("Cannot read the volume bitmap."));
-        return false;
-    }
-
-    // Smallest files first: they are the easiest to place and give the most benefit per move.
     std::vector<size_t> order;
     {
         std::lock_guard<std::mutex> guard(m_lock);
@@ -724,7 +713,69 @@ bool CDefragEngine::Defragment(DWORD minFragments)
                 order.push_back(i);
             }
         }
+    }
 
+    CString scope, nothingToDo;
+    if (minFragments > 2)
+    {
+        scope.Format(_T(" of files with %lu+ fragments"), minFragments);
+        nothingToDo.Format(_T("No files with %lu or more fragments; nothing to defragment."), minFragments);
+    }
+    else
+    {
+        nothingToDo = _T("No fragmented files; nothing to defragment.");
+    }
+
+    return RunDefragPass(order, scope, nothingToDo);
+}
+
+// Defragments only the given files (chosen in the file list). They must come from the current
+// analysis results; no new analysis is started, so this also works after a stopped analysis.
+bool CDefragEngine::DefragmentFiles(const std::vector<CString>& paths)
+{
+    // Match case-insensitively, as Windows paths are.
+    std::set<std::wstring> wanted;
+    for (const CString& path : paths)
+    {
+        CString key = path;
+        key.MakeUpper();
+        wanted.insert(std::wstring(key));
+    }
+
+    std::vector<size_t> order;
+    {
+        std::lock_guard<std::mutex> guard(m_lock);
+        for (size_t i = 0; i < m_files.size(); ++i)
+        {
+            CString key = m_files[i].path;
+            key.MakeUpper();
+            if (!m_files[i].done && wanted.count(std::wstring(key)))
+            {
+                order.push_back(i);
+            }
+        }
+    }
+
+    CString scope;
+    scope.Format(_T(" of %Iu selected file(s)"), paths.size());
+    return RunDefragPass(order, scope, _T("The selected files are already defragmented; nothing to do."));
+}
+
+// The defragmentation loop shared by Defragment and DefragmentFiles. `order` holds indices into
+// m_files; `scope` is inserted into the final status ("Defragmentation<scope> complete: ...").
+bool CDefragEngine::RunDefragPass(std::vector<size_t> order, const CString& scope, const CString& nothingToDo)
+{
+    SetStatus(_T("Preparing to defragment..."));
+    Notify(0, true);
+    if (!ReadVolumeBitmap())
+    {
+        SetStatus(_T("Cannot read the volume bitmap."));
+        return false;
+    }
+
+    // Smallest files first: they are the easiest to place and give the most benefit per move.
+    {
+        std::lock_guard<std::mutex> guard(m_lock);
         std::sort(order.begin(), order.end(),
             [this](size_t a, size_t b) { return m_files[a].clusters < m_files[b].clusters; });
         m_stats.filesDefragged = 0;
@@ -734,17 +785,7 @@ bool CDefragEngine::Defragment(DWORD minFragments)
 
     if (order.empty())
     {
-        CString msg;
-        if (highOnly)
-        {
-            msg.Format(_T("No files with %lu or more fragments; nothing to defragment."), minFragments);
-        }
-        else
-        {
-            msg = _T("No fragmented files; nothing to defragment.");
-        }
-
-        SetStatus(msg);
+        SetStatus(nothingToDo);
         Notify(100, true);
         return true;
     }
@@ -801,12 +842,6 @@ bool CDefragEngine::Defragment(DWORD minFragments)
         std::lock_guard<std::mutex> guard(m_lock);
         m_active = { -1, 0 };
         RecomputeFragmentStats();
-        CString scope;
-        if (highOnly)
-        {
-            scope.Format(_T(" of files with %lu+ fragments"), minFragments);
-        }
-
         m_status.Format(_T("Defragmentation%s %s: %I64u files defragmented, %I64u could not be moved, %I64u still fragmented."),
             (LPCTSTR)scope, completed ? _T("complete") : _T("stopped"),
             m_stats.filesDefragged, m_stats.filesNotMoved, m_stats.fragmentedFiles);

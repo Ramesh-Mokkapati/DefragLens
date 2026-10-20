@@ -84,7 +84,7 @@ class CDefragEngine
 {
 public:
     // The long-running operations the UI can start; also sent back in WM_DEFRAG_DONE.
-    enum Operation { OpAnalyze = 1, OpDefragment = 2, OpDefragmentHigh = 3, OpBootOptimize = 4 };
+    enum Operation { OpAnalyze = 1, OpDefragment = 2, OpDefragmentHigh = 3, OpBootOptimize = 4, OpDefragmentSelected = 5 };
 
     CDefragEngine() = default;
     ~CDefragEngine();
@@ -115,6 +115,9 @@ public:
     // minFragments fragments; the default covers every fragmented file.
     bool Analyze();
     bool Defragment(DWORD minFragments = 2);
+    // Defragments only these files (full paths from the file list). Uses the current analysis
+    // results as they are, so it also works after a stopped analysis.
+    bool DefragmentFiles(const std::vector<CString>& paths);
 
     // Defragments the files Windows reads at startup (Layout.ini) and packs them
     // together in boot order, as close to the start of the volume as possible.
@@ -149,6 +152,9 @@ private:
     static bool GetExtents(HANDLE hFile, std::vector<FileExtent>& extents);
     // Records one file or folder found during Analyze() (counts it, keeps it if fragmented).
     void AnalyzeEntry(const CString& path, bool isDir, ULONGLONG size, ULONGLONG& scannedClusters);
+    // The defragmentation loop behind Defragment and DefragmentFiles: moves m_files[order[...]]
+    // smallest first, then sets the final status ("Defragmentation<scope> complete: ...").
+    bool RunDefragPass(std::vector<size_t> order, const CString& scope, const CString& nothingToDo);
     // Defragments m_files[index] into the first suitable free run.
     MoveResult DefragFile(size_t index);
     // target < 0: find a free run and skip files that are already contiguous.

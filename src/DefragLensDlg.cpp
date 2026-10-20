@@ -22,6 +22,11 @@ namespace
     const LPCTSTR kBootLogSeenEntry = _T("BootLogSeen");   // time of the last boot-time log already reported
     const COLORREF kHighlyFragmentedText = RGB(111, 18, 98);   // matches the map colour
 
+    // File-list context menu commands (returned by TrackPopupMenu, so they need no message map).
+    const UINT kCmdDefragment = 1;
+    const UINT kCmdOpenLocation = 2;
+    const UINT kCmdCopyPath = 3;
+
     // "1.5 GB" style sizes, using Windows' own formatting.
     CString FormatBytes(ULONGLONG bytes)
     {
@@ -66,6 +71,7 @@ BEGIN_MESSAGE_MAP(CDefragLensDlg, CDialogEx)
     ON_BN_CLICKED(IDC_CHECK_HIGH_ONLY, &CDefragLensDlg::OnHighOnlyClicked)
     ON_NOTIFY(NM_DBLCLK, IDC_LIST_FILES, &CDefragLensDlg::OnFileDblClk)
     ON_NOTIFY(NM_CUSTOMDRAW, IDC_LIST_FILES, &CDefragLensDlg::OnFileCustomDraw)
+    ON_WM_CONTEXTMENU()
     ON_MESSAGE(WM_DEFRAG_PROGRESS, &CDefragLensDlg::OnDefragProgress)
     ON_MESSAGE(WM_DEFRAG_DONE, &CDefragLensDlg::OnDefragDone)
 END_MESSAGE_MAP()
@@ -457,6 +463,10 @@ UINT AFX_CDECL CDefragLensDlg::WorkerProc(LPVOID param)
         ok = dlg->m_engine.BootOptimize();
         break;
 
+    case CDefragEngine::OpDefragmentSelected:
+        ok = dlg->m_engine.DefragmentFiles(dlg->m_selectedPaths);
+        break;
+
     default:
         ok = dlg->m_engine.Defragment(dlg->m_defragMin);
         break;
@@ -686,11 +696,149 @@ void CDefragLensDlg::OnFileDblClk(NMHDR* pNMHDR, LRESULT* pResult)
     auto* item = reinterpret_cast<NMITEMACTIVATE*>(pNMHDR);
     if (item->iItem >= 0)
     {
-        CString args = _T("/select,\"") + m_files.GetItemText(item->iItem, 2) + _T("\"");
-        ShellExecute(m_hWnd, nullptr, _T("explorer.exe"), args, nullptr, SW_SHOWNORMAL);
+        ShowInExplorer(m_files.GetItemText(item->iItem, 2));
     }
 
     *pResult = 0;
+}
+
+// Context menu for the file list. A right-click selects the row under the mouse first (list view
+// default), so the menu always acts on the current selection: one file or several.
+void CDefragLensDlg::OnContextMenu(CWnd* pWnd, CPoint point)
+{
+    if (pWnd != &m_files)
+    {
+        CDialogEx::OnContextMenu(pWnd, point);
+        return;
+    }
+
+    // From the keyboard (Shift+F10 or the Menu key) the point is (-1, -1): open the menu at the
+    // focused row instead of the mouse position.
+    if (point.x == -1 && point.y == -1)
+    {
+        int row = m_files.GetNextItem(-1, LVNI_FOCUSED | LVNI_SELECTED);
+        if (row < 0)
+        {
+            row = m_files.GetNextItem(-1, LVNI_SELECTED);
+        }
+
+        CRect rc;
+        if (row >= 0 && m_files.GetItemRect(row, &rc, LVIR_LABEL))
+        {
+            point = rc.CenterPoint();
+        }
+        else
+        {
+            m_files.GetClientRect(&rc);
+            point = rc.TopLeft();
+        }
+
+        m_files.ClientToScreen(&point);
+    }
+
+    std::vector<CString> paths = GetSelectedPaths();
+    if (paths.empty())
+    {
+        return;   // right-click on empty space below the rows
+    }
+
+    CString defragText;
+    if (paths.size() == 1)
+    {
+        defragText = _T("&Defragment");
+    }
+    else
+    {
+        defragText.Format(_T("&Defragment %Iu Selected Files"), paths.size());
+    }
+
+    // Defragment is unavailable while another operation runs; Open File Location needs one file.
+    CMenu menu;
+    menu.CreatePopupMenu();
+    menu.AppendMenu(MF_STRING | (m_busy ? MF_GRAYED : MF_ENABLED), kCmdDefragment, defragText);
+    menu.AppendMenu(MF_SEPARATOR);
+    menu.AppendMenu(MF_STRING | (paths.size() == 1 ? MF_ENABLED : MF_GRAYED), kCmdOpenLocation, _T("Open File &Location"));
+    menu.AppendMenu(MF_STRING, kCmdCopyPath, paths.size() == 1 ? _T("&Copy Path") : _T("&Copy Paths"));
+    menu.SetDefaultItem(kCmdDefragment);
+
+    // TPM_RETURNCMD returns the chosen command directly instead of posting WM_COMMAND.
+    UINT command = menu.TrackPopupMenu(TPM_LEFTALIGN | TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY,
+        point.x, point.y, this);
+    switch (command)
+    {
+    case kCmdDefragment:
+        m_selectedPaths = paths;
+        StartOperation(CDefragEngine::OpDefragmentSelected);
+        break;
+
+    case kCmdOpenLocation:
+        ShowInExplorer(paths[0]);
+        break;
+
+    case kCmdCopyPath:
+    {
+        CString text;
+        for (size_t i = 0; i < paths.size(); ++i)
+        {
+            text += (i ? _T("\r\n") : _T("")) + paths[i];
+        }
+
+        CopyToClipboard(text);
+        break;
+    }
+
+    default:
+        break;   // menu dismissed
+    }
+}
+
+// Full paths of the selected rows, in list order.
+std::vector<CString> CDefragLensDlg::GetSelectedPaths() const
+{
+    std::vector<CString> paths;
+    for (int row = m_files.GetNextItem(-1, LVNI_SELECTED); row >= 0; row = m_files.GetNextItem(row, LVNI_SELECTED))
+    {
+        paths.push_back(m_files.GetItemText(row, 2));
+    }
+
+    return paths;
+}
+
+// Opens Explorer on the file's folder with the file selected.
+void CDefragLensDlg::ShowInExplorer(const CString& path)
+{
+    CString args = _T("/select,\"") + path + _T("\"");
+    ShellExecute(m_hWnd, nullptr, _T("explorer.exe"), args, nullptr, SW_SHOWNORMAL);
+}
+
+// Puts Unicode text on the clipboard (one path per line when several are copied).
+void CDefragLensDlg::CopyToClipboard(const CString& text)
+{
+    if (!OpenClipboard())
+    {
+        return;
+    }
+
+    EmptyClipboard();
+    const size_t bytes = (text.GetLength() + 1) * sizeof(TCHAR);
+    HGLOBAL memory = GlobalAlloc(GMEM_MOVEABLE, bytes);
+    if (memory)
+    {
+        void* target = GlobalLock(memory);
+        if (target)
+        {
+            memcpy(target, (LPCTSTR)text, bytes);
+            GlobalUnlock(memory);
+        }
+
+        // On success the clipboard owns the memory; otherwise free it ourselves.
+        if (!target || !SetClipboardData(CF_UNICODETEXT, memory))
+        {
+            GlobalFree(memory);
+        }
+    }
+
+    CloseClipboard();
 }
 
 // ---------------------------------------------------------------------------

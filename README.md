@@ -22,6 +22,7 @@ built into Windows. It uses the same file-system API as Windows' own optimizer, 
 - **Live cluster map**: color-coded grid of the whole volume, updated while work is in progress.
 - **Statistics**: capacity, free space, cluster size, files and folders analyzed, fragmented files, fragments per file and fragmented data.
 - **Most fragmented files**: up to 2,000 files sorted by fragment count; double-click one to show it in Explorer.
+- **Right-click to defragment**: right-click one file, or select several (Ctrl/Shift+click), for **Defragment**, **Open File Location** and **Copy Path**. Shift+F10 or the Menu key opens the same menu.
 - **Stop at any time**: cancels between move chunks; closing the window while busy asks first.
 - Resizable window, high-DPI aware, single self-contained `.exe` (MFC linked statically).
 
@@ -102,6 +103,7 @@ The project uses the `v143` toolset. Newer Visual Studio versions may offer to r
    - To handle only the worst files, set **Highly fragmented: _N_ or more fragments** and click **Defragment Highly Fragmented (_count_)**.
    - Changing the threshold immediately updates the map, the statistics, the list highlighting and the button's count.
    - Tick **Show only highly fragmented files in the list** to hide the rest.
+   - To defragment particular files, select them in the list, right-click and choose **Defragment**. This works on the files already listed, even if the analysis was stopped part-way.
 5. Click **Stop** to cancel. The volume stays consistent: Windows performs each move atomically, so a stopped run leaves files either moved or unmoved, never damaged.
 
 ### Boot Optimize
@@ -195,7 +197,8 @@ The engine talks to the volume directly through these Windows I/O control codes:
 requests each entry's extents. It doesn't follow junctions and symbolic links, so it can't loop.
 
 **Defragmentation** takes the fragmented files (or, for **Defragment Highly Fragmented**, only those
-with at least the threshold number of fragments) and sorts them by size, then for each file:
+with at least the threshold number of fragments, or, from the right-click menu, only the selected
+files) and sorts them by size, then for each file:
 
 1. Re-reads its extents, skipping it if it has already become contiguous.
 2. Finds a free run large enough using a next-fit search of the bitmap.
@@ -245,7 +248,7 @@ The 32-bit boot-time program needs the compiler's 64-bit arithmetic helpers (`__
 
 ### Threading model
 
-`CDefragEngine::Analyze()`, `Defragment()` and `BootOptimize()` run on a worker thread started with `AfxBeginThread`.
+`CDefragEngine::Analyze()`, `Defragment()`, `DefragmentFiles()` and `BootOptimize()` run on a worker thread started with `AfxBeginThread`.
 The System Files dialog's **Consolidate MFT** runs `ConsolidateMft()` directly on the UI thread, with a wait cursor.
 The engine guards its shared state with a mutex and exposes thread-safe snapshots
 (`BuildCellMap`, `GetStats`, `GetStatusText`, `GetFragmentedFiles`) for the UI.
