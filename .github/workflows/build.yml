@@ -1,7 +1,8 @@
 # GitHub Actions workflow for DefragLens.
 # Builds Release for Win32 and x64 with every warning treated as an error, then uploads one
 # artifact: DefragLens-<version>.zip containing Win32\ and x64\ (DefragLens.exe and
-# DefragLensBoot.exe each) plus README.md.
+# DefragLensBoot.exe each) plus README.md. Pushes to main and v* tags also publish that zip as a
+# GitHub release.
 
 name: Build
 
@@ -13,7 +14,7 @@ on:
   pull_request:
   workflow_dispatch:
 
-# Read-only token: the workflow only checks out code and uploads an artifact.
+# Read-only token by default; only the release job may create tags and releases.
 permissions:
   contents: read
 
@@ -22,6 +23,9 @@ jobs:
     name: Build Win32 and x64
     # Visual Studio 2022 with the v143 toolset and the C++ MFC component (x86 and x64).
     runs-on: windows-2022
+    outputs:
+      version: ${{ steps.package.outputs.version }}
+      zipname: ${{ steps.package.outputs.zipname }}
 
     steps:
       - name: Check out
@@ -54,12 +58,15 @@ jobs:
           }
 
       # Stage both platforms' programs and the README, then zip them. The version is the tag name for
-      # tag builds and the short commit hash otherwise.
+      # tag builds, v1.0.<run number> for pushes to main (released under that tag), and the short
+      # commit hash otherwise.
       - name: Package
         id: package
         shell: pwsh
         run: |
-          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME } else { $env:GITHUB_SHA.Substring(0, 7) }
+          $version = if ($env:GITHUB_REF_TYPE -eq 'tag') { $env:GITHUB_REF_NAME }
+                     elseif ($env:GITHUB_EVENT_NAME -eq 'push' -and $env:GITHUB_REF -eq 'refs/heads/main') { "v1.0.$env:GITHUB_RUN_NUMBER" }
+                     else { $env:GITHUB_SHA.Substring(0, 7) }
           $name = "DefragLens-$version"
           $stage = Join-Path $env:RUNNER_TEMP $name
           foreach ($platform in 'Win32', 'x64') {
@@ -73,6 +80,8 @@ jobs:
           Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip
           Get-ChildItem -Recurse $stage | ForEach-Object { Write-Host $_.FullName.Substring($stage.Length + 1) }
           "zip=$zip" >> $env:GITHUB_OUTPUT
+          "zipname=$name.zip" >> $env:GITHUB_OUTPUT
+          "version=$version" >> $env:GITHUB_OUTPUT
 
       # archive: false uploads the zip as-is, so the artifact is the zip itself (not a zip inside a zip).
       - name: Upload artifact
@@ -81,3 +90,33 @@ jobs:
           path: ${{ steps.package.outputs.zip }}
           archive: false
           if-no-files-found: error
+
+  release:
+    name: Publish release
+    # Every pushed v* tag, and every push to main whose build passes. The zip is named
+    # DefragLens-<tag>.zip with x64\DefragLens.exe inside, which is what the Deployments installer fetches.
+    if: github.ref_type == 'tag' || (github.event_name == 'push' && github.ref == 'refs/heads/main')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Download zip
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.build.outputs.zipname }}
+          path: release
+
+      # For a push to main, gh creates the tag on the commit that was built.
+      - name: Create release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.version }}
+        run: >
+          gh release create "$TAG" release/*.zip
+          --repo "$GITHUB_REPOSITORY"
+          --target "$GITHUB_SHA"
+          --title "DefragLens $TAG"
+          --generate-notes
+          --latest

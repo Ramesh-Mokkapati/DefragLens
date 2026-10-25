@@ -6,6 +6,10 @@ built into Windows. It uses the same file-system API as Windows' own optimizer, 
 
 **Platforms:** Windows 10 / 11, x64 and Win32 (32-bit). **Language:** C++17. **Framework:** MFC, linked statically.
 
+## Screenshots
+
+![DefragLens after analyzing a volume: cluster map with highly fragmented files in purple, statistics, and the most fragmented files](docs/screenshots/main-window.png)
+
 ## Features
 
 - **Volume picker**: lists fixed and removable drives with label, file system and size; the Windows drive is preselected.
@@ -90,7 +94,9 @@ DefragLens-<version>.zip
     └── DefragLensBoot.exe
 ```
 
-`<version>` is the tag name for tag builds (for example `v1.0.0`), and the short commit hash otherwise.
+`<version>` is the tag name for tag builds (for example `v1.0.0`), `v1.0.<run number>` for pushes to `main`, and the short commit hash otherwise.
+
+4. For a push to `main` or a `v*` tag, a release job then publishes the zip as a GitHub release. For a push to `main` it creates the tag `v1.0.<run number>` on the built commit. The Deployments installer takes `x64\DefragLens.exe` and `x64\DefragLensBoot.exe` from this zip. To change the major or minor version of the automatic releases, edit `v1.0.` in the workflow's *Package* step.
 
 The project uses the `v143` toolset. Newer Visual Studio versions may offer to retarget it; either choice works.
 
