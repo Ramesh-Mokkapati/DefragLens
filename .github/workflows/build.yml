@@ -102,11 +102,21 @@ jobs:
       contents: write
 
     steps:
-      - name: Download zip
+      # download-artifact unpacks the zip, so this gives README.md, Win32\ and x64\.
+      - name: Download build
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.build.outputs.zipname }}
-          path: release
+          path: staged
+
+      # Zip it again under the same name and with the same layout as the build's artifact.
+      - name: Zip
+        env:
+          ZIPNAME: ${{ needs.build.outputs.zipname }}
+        run: |
+          mkdir release
+          (cd staged && zip -r "../release/$ZIPNAME" .)
+          unzip -l "release/$ZIPNAME"
 
       # For a push to main, gh creates the tag on the commit that was built.
       - name: Create release
